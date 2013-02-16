@@ -1,0 +1,125 @@
+<?php
+
+/*
+ * Photo upload module.
+ * Copyright (C) 2012-2013 Moskvichev Andrey V.
+ */
+
+function photoupload_perm() 
+{
+	return array('upload photos');
+}
+
+function photoupload_menu() 
+{
+	$items = array();
+
+	// mobile photo upload
+	$items['photoupload'] = array(
+		'title' => 'Mobile photo upload',
+		'description' => 'Upload photo',
+		// setup page callback to return form
+		'page callback' => 'drupal_get_form',
+		// form function
+		'page arguments' => array('photoupload_upload_file'),
+		// users with 'upload photos' permission is only allowed
+		'access arguments' => array('upload photos'),
+		// hide it from menus, available to users
+		'type' => MENU_CALLBACK, 
+	);
+	return $items;
+}
+
+function photoupload_upload_file($form_state)
+{
+	// prepare the file upload form
+	// set multipart/form-data encoding type
+	$form = array('#attributes' => array('enctype' => 'multipart/form-data'));
+	
+	// image file selector
+	$form['image'] = array(
+	    '#type' => 'file',
+	    '#title' => 'Upload photo',
+	    '#description' => t('Pick a image file to upload')
+	);
+
+	// page node identifier. The page to image be attached
+	$form['nid'] = array(
+		'#type' => 'textfield',
+		'#title' => 'Page nid',
+	);
+
+	$form['#token'] = FALSE;
+	
+	// submit button
+	$form['submit'] = array('#type' => 'submit', '#value' => 'Upload');
+	return $form; 
+} 
+
+#handle the form submission
+function photoupload_upload_file_submit($form, &$form_state) 
+{
+	#this leads us to sites/mysite.example.com/files/
+	$dir = file_directory_path();
+	
+	# unlike form submissions, multipart form submissions are not in 
+	# $form_state, but rather in $FILES, which requires more checking
+	
+	if (!isset($_FILES) || empty($_FILES) || $_FILES['files']['size']['image'] == 0) {
+    		drupal_set_message("Your file doesn't appear to be here.");
+		return ;
+	}
+
+	$name = $_FILES['files']['name']['image'];
+	$size = $_FILES['files']['size']['image'];
+	$type = $_FILES['files']['type']['image'];
+
+	$nid = $form_state['values']['nid'];
+
+	#this is the actual place where we store the file
+	$file = file_save_upload('image', array() , $dir);
+	if ($file) {
+		$filename = $dir."/".$file->filename;
+	
+		$import = _photoupload_attach_photo($filename, $nid);
+		drupal_set_message($import);  
+	}
+	else {
+	    drupal_set_message("Something went wrong saving your file.");
+	}
+}
+
+function _photoupload_attach_photo($file, $nid)
+{
+	global $user;
+
+	// load node by nid
+	$node = node_load($nid);
+
+	// create file object
+	$name = basename($file);
+	$file_obj = new stdClass();
+	$file_obj->filename = $name;
+	$file_obj->filepath = $file;
+	$file_obj->filemime = file_get_mimetype($name);
+	$file_obj->filesize = $stats['size'];
+	$file_obj->filesource = $file;
+	$file_obj->status = FILE_STATUS_TEMPORARY;
+	$file_obj->timestamp = time();
+	$file_obj->list = 1;
+	$file_obj->new = true;
+
+	// write it
+	drupal_write_record('files', $file_obj);
+
+	file_set_status($file_obj, 1);
+
+	// attach file to node
+	$node->files[$file_obj->fid] = $file_obj;
+
+	// and finally, save node
+	node_save($node);
+	return "OK";
+}
+
+?>

@@ -1,0 +1,6 @@
+name = Photo upload
+description = Module that manages photo uploads from Android devices
+
+core = 6.x
+version = "6.x-1.0"
+project = "photoupload"
